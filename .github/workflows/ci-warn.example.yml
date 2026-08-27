@@ -1,0 +1,29 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read          # 최소 권한
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      # checkout v4.2.2 — 태그 아닌 커밋 SHA로 고정
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0   # 전체 이력 스캔
+      - name: 스캐너 설치
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sudo sh -s -- -b /usr/local/bin
+          curl -sL https://github.com/gitleaks/gitleaks/releases/download/v8.30.0/gitleaks_8.30.0_linux_x64.tar.gz \
+            -o /tmp/gitleaks.tgz
+          sudo tar -xzf /tmp/gitleaks.tgz -C /usr/local/bin gitleaks
+          python3 -m pip install --quiet semgrep
+      - name: 시크릿 스캔 (경고)
+        run: gitleaks git . -v --exit-code 0
+      - name: SAST (경고)
+        run: semgrep --config p/ci --config p/python demo-app/
+      - name: SCA · IaC (경고)
+        run: trivy fs --scanners vuln,misconfig . --exit-code 0 --severity HIGH,CRITICAL
